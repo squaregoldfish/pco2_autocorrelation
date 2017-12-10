@@ -33,6 +33,7 @@ function run()
 
             # Open a new output file
             outchan = open(OUTDIR * "/" * currentdataset * ".tsv", "w")
+            write(outchan, "date\tlon\tlat\tfco2\n")
             print("\033[2K\r $linecount $currentdataset")
         end
 
