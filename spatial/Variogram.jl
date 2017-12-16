@@ -64,6 +64,7 @@ function variogram(pointdata::Array{Float64,2}, binsize::Int64)
     # add the difference in value between each pair
     # to the appropriate bin
     npoints::Int64 = size(pointdata)[1]
+    print("$npoints\n")
 
     largest_bin = 0
 
