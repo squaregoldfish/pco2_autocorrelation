@@ -12,6 +12,6 @@ const OUTDIR = ARGS[2]
     writedlm("$outdir/$datasetname.csv", variogram, ',')
 end
 
-files = readdir(INDIR)[1:15]
+files = readdir(INDIR)
 
 @time pmap(files -> makevariogram(INDIR, OUTDIR, files), files)
