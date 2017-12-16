@@ -65,6 +65,8 @@ function variogram(pointdata::Array{Float64,2}, binsize::Int64)
     # to the appropriate bin
     npoints::Int64 = size(pointdata)[1]
 
+    largest_bin = 0
+
     for i in 1:npoints - 1
 
         point1::Array{Float64} = pointdata[i, 1:2]
@@ -76,13 +78,17 @@ function variogram(pointdata::Array{Float64,2}, binsize::Int64)
 
             distance::Float64 = evaluate(Distances.Haversine(6371), point1, point2)
             bin::Int64 = Int64(floor(distance / 50)) + 1
+            if bin > largest_bin
+                largest_bin = bin
+            end
             add(bins[bin], abs(pointdata[j, 3] - value1))
         end
     end
 
+
     bin_means::Array{Float64} = [mean(i) for i in bins]
 
-    return [bin_distances bin_means]
+    return [bin_distances[1:largest_bin] bin_means[1:largest_bin]]
 end
 
 
