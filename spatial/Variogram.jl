@@ -58,7 +58,7 @@ function variogram(pointdata::Array{Float64,2}, binsize::Int64)
     # distance between points is 20,037.5km.
     # So the number of bins is ceil(20,037.5 / binsize).
     bins::Array{BuildMean} = [BuildMean() for i = 1:ceil(20037.5 / binsize)]
-    bin_distances::Array{Int64} = collect(25:binsize:20037.5)
+    bin_distances::Array{Int64} = collect(0:binsize:20037.5)
 
     # Go through every pair of points, and
     # add the difference in value between each pair
