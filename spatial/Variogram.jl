@@ -1,34 +1,36 @@
 module Variogram
 using Distances
+using LsqFit
 
 export variogram
+export fit
 
 """
-    Utility type to collect values and eventually calculate a mean
+    Utility type to collect values for a semivariogram bin
 """
-type BuildMean
-    total::Float64
+type BuildBin
+    sumofsquares::Float64
     entries::Int
 
-    BuildMean() = new(0.0, 0)
+    BuildBin() = new(0.0, 0)
 end
 
 """
    Add a value to a mean
 """
-function add(x::BuildMean, value::Float64)
-    x.total += value
+function add(x::BuildBin, value::Float64)
+    x.sumofsquares += value^2
     x.entries += 1
 end
 
 """
    Calculate the final value of a mean
 """
-function mean(x::BuildMean)
+function mean(x::BuildBin)
     result::Float64 = NaN
 
     if x.entries > 0
-        result = x.total / x.entries
+        result = x.sumofsquares / (2 * x.entries)
 
     end
 
@@ -57,7 +59,7 @@ function variogram(pointdata::Array{Float64,2}, binsize::Int64)
     # The Earth is 40,075km in diameter, so the maximum
     # distance between points is 20,037.5km.
     # So the number of bins is ceil(20,037.5 / binsize).
-    bins::Array{BuildMean} = [BuildMean() for i = 1:ceil(20037.5 / binsize)]
+    bins::Array{BuildBin} = [BuildBin() for i = 1:ceil(20037.5 / binsize)]
     bin_distances::Array{Int64} = collect(0:binsize:20037.5)
 
     # Go through every pair of points, and
@@ -92,5 +94,14 @@ function variogram(pointdata::Array{Float64,2}, binsize::Int64)
     return [bin_distances[1:largest_bin] bin_means[1:largest_bin]]
 end
 
+"""
+    Fit an exponential curve to a variogram
+"""
+function fit(variogram::Array{Float64, 2})
+    model(x, p) = p[1]*(1 - exp.(-x./p[2]))
+    local p0::Array{Float64, 1} = [250.0, 50.0]
+    local fit = curve_fit(model, variogram[:,1], variogram[:,2], p0)
+    return fit.param
+end
 
 end #Module
