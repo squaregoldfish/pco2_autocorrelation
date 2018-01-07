@@ -4,6 +4,7 @@ using LsqFit
 
 export variogram
 export fit
+export polyfit
 
 """
     Utility type to collect values for a semivariogram bin
@@ -66,7 +67,6 @@ function variogram(pointdata::Array{Float64,2}, binsize::Int64)
     # add the difference in value between each pair
     # to the appropriate bin
     npoints::Int64 = size(pointdata)[1]
-    print("$npoints\n")
 
     largest_bin = 0
 
@@ -103,5 +103,13 @@ function fit(variogram::Array{Float64, 2})
     local fit = curve_fit(model, variogram[:,1], variogram[:,2], p0)
     return fit.param
 end
+
+function polyfit(variogram::Array{Float64, 2})
+    model(x, p) = p[1] + p[2]x + p[3]x.^2 + p[4]x.^3 + p[5]x.^4 + p[6]x.^5 + p[7]x.^6 + p[8]x.^7 + p[9]x.^8 + p[10]x.^9 + p[11]x.^10
+    local p0::Array{Float64, 1} = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    local fit = curve_fit(model, variogram[:,1], variogram[:,2], p0)
+    return fit.param
+end
+
 
 end #Module
