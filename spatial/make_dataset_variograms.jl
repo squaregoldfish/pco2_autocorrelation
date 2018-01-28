@@ -39,7 +39,7 @@ const OUTDIR = ARGS[2]
         #writedlm("$outdir/$datasetname.polyfit.csv", polyfit, ',')
 
         # Plot the variogram and fitted curve
-        Plots.scatter(variogram[:,1], variogram[:,2], size=(1200,800))
+        Plots.scatter(variogram[:,1], variogram[:,2])
 
         #model(x, p) = p[1]*(1 - exp.(-x./p[2]))
         #Plots.plot!(variogram[:,1], model(variogram[:,1], fit))
