@@ -10,33 +10,47 @@ const OUTDIR = ARGS[2]
 @everywhere function makevariogram(indir, outdir, file)
     
     # Load the dataset
-    local datasetname = file[1:end - 4]
+    local datasetname::String = file[1:end - 4]
     print("$datasetname\n")
-    local dataset = readdlm("$indir/$file", '\t', Float64, '\n', header=true)[1]
+    
+    local variogramfile::String = "$outdir/$datasetname.csv"
+    local plotfile::String = "$outdir/$datasetname.png"
 
-    # Calculate the variogram
-    local variogram = Variogram.variogram(dataset, 5)
-    writedlm("$outdir/$datasetname.csv", variogram, ',')
+    # Don't overwrite an existing variogram
+    local alreadycalculated::Bool = false
+    if isfile(variogramfile) && stat(variogramfile).size > 0 && isfile(plotfile) && stat(plotfile).size > 0
+        alreadycalculated = true
+    end
 
-    # Fit the variogram
-    local fit = Variogram.fit(variogram)
-    writedlm("$outdir/$datasetname.fit.csv", fit, ',')
+    if !alreadycalculated
 
-    local polyfit = Variogram.polyfit(variogram)
-    writedlm("$outdir/$datasetname.polyfit.csv", polyfit, ',')
+        local readcount::Int64 = 0
+        local dataset::Array{Float64, 2} = readdlm("$indir/$file", '\t', Float64, '\n', header=true)[1]
 
-    # Plot the variogram and fitted curve
-    Plots.scatter(variogram[:,1], variogram[:,2], size=(1200,800))
+        # Calculate the variogram
+        local variogram = Variogram.variogram(dataset, 5)
+        writedlm("$outdir/$datasetname.csv", variogram, ',')
 
-    model(x, p) = p[1]*(1 - exp.(-x./p[2]))
-    Plots.plot!(variogram[:,1], model(variogram[:,1], fit))
+        # Fit the variogram
+        #local fit = Variogram.fit(variogram)
+        #writedlm("$outdir/$datasetname.fit.csv", fit, ',')
 
-    polymodel(x, p) = p[1] + p[2]x + p[3]x.^2 + p[4]x.^3 + p[5]x.^4 + p[6]x.^5 + p[7]x.^6 + p[8]x.^7 + p[9]x.^8 + p[10]x.^9 + p[11]x.^10
-    Plots.plot!(variogram[:,1], polymodel(variogram[:,1], polyfit))
+        #local polyfit = Variogram.polyfit(variogram)
+        #writedlm("$outdir/$datasetname.polyfit.csv", polyfit, ',')
 
-    Plots.png("$outdir/$datasetname.png")
+        # Plot the variogram and fitted curve
+        Plots.scatter(variogram[:,1], variogram[:,2], size=(1200,800))
+
+        #model(x, p) = p[1]*(1 - exp.(-x./p[2]))
+        #Plots.plot!(variogram[:,1], model(variogram[:,1], fit))
+
+        #polymodel(x, p) = p[1] + p[2]x + p[3]x.^2 + p[4]x.^3 + p[5]x.^4 + p[6]x.^5 + p[7]x.^6 + p[8]x.^7 + p[9]x.^8 + p[10]x.^9 + p[11]x.^10
+        #Plots.plot!(variogram[:,1], polymodel(variogram[:,1], polyfit))
+
+        Plots.png("$outdir/$datasetname.png")
+    end
 end
 
 files = readdir(INDIR)
 
-pmap(files -> makevariogram(INDIR, OUTDIR, files), files)
+pmap(f -> makevariogram(INDIR, OUTDIR, f), files)
