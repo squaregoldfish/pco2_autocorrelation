@@ -75,7 +75,7 @@ function variogram(pointdata::Array{Float64,2}, binsize::Int64)
         point1::Array{Float64} = pointdata[i, 1:2]
         value1::Float64 = pointdata[i, 3]
 
-        for j in i + 1:npoints
+        for j in i:npoints
             
             point2::Array{Float64} = pointdata[j, 1:2]
 
