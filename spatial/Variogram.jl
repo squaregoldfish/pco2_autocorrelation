@@ -1,10 +1,11 @@
 module Variogram
 using Distances
-using LsqFit
+using SmoothingSplines
+using Plots
+
 
 export variogram
-export fit
-export polyfit
+export getdecorrelationlength
 
 """
     Utility type to collect values for a semivariogram bin
@@ -37,8 +38,6 @@ function mean(x::BuildBin)
 
     return result
 end
-
-
 
 """
     Computes a variogram for a set of geographical points.
@@ -95,21 +94,99 @@ function variogram(pointdata::Array{Float64,2}, binsize::Int64)
 end
 
 """
-    Fit an exponential curve to a variogram
+    Get the decorrelation length of a variogram.
+
+    Returns -1 if no decorrelation length can be Calculated
 """
-function fit(variogram::Array{Float64, 2})
-    model(x, p) = p[1]*(1 - exp.(-x./p[2]))
-    local p0::Array{Float64, 1} = [250.0, 50.0]
-    local fit = curve_fit(model, variogram[:,1], variogram[:,2], p0)
-    return fit.param
+function getdecorrelationlength(variogram::Array{Float64, 2}, plot::Bool)
+
+    local decorrelationlength::Int64 = -1
+    fillgaps!(variogram)
+
+    if size(variogram)[1] > 2
+        local spline = SmoothingSplines.fit(SmoothingSplines.SmoothingSpline, variogram[:,1], variogram[:,2], 1e6)
+        local smoothed = SmoothingSplines.predict(spline)
+        
+        if plot
+            Plots.plot!(variogram[:,1], smoothed, linewidth=2)
+        end
+
+        limitindex::Int64 = getdecorrelationlimit(smoothed)
+        if limitindex != -1
+            decorrelationlength = variogram[limitindex, 1]
+        end
+    end
+
+    return decorrelationlength
 end
 
-function polyfit(variogram::Array{Float64, 2})
-    model(x, p) = p[1] + p[2]x + p[3]x.^2 + p[4]x.^3 + p[5]x.^4 + p[6]x.^5 + p[7]x.^6 + p[8]x.^7 + p[9]x.^8 + p[10]x.^9 + p[11]x.^10
-    local p0::Array{Float64, 1} = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    local fit = curve_fit(model, variogram[:,1], variogram[:,2], p0)
-    return fit.param
+"""
+    Fill gaps in a variogram using linear interpolation
+"""
+function fillgaps!(variogram::Array{Float64,2})
+
+    local lastlag::Int64 = 0
+    local currentlag::Int64 = 1
+
+    while currentlag < size(variogram)[1]
+
+        if !isnan(variogram[currentlag, 2])
+            lastlag = currentlag
+            currentlag +=  1
+        else
+            local nextgoodlag::Int64 = currentlag + 1
+            while isnan(variogram[nextgoodlag, 2])
+                nextgoodlag = nextgoodlag + 1
+            end
+
+            local gaplength::Int64 = nextgoodlag - lastlag
+            local gaprange::Float64 = variogram[nextgoodlag, 2] - variogram[lastlag, 2]
+            local stepsize::Float64 = gaprange / gaplength
+
+            local fillstep::Int64 = 0
+            for filllag in currentlag:nextgoodlag - 1
+                fillstep += 1
+                variogram[filllag, 2] = variogram[lastlag, 2] + (stepsize * fillstep)
+            end
+
+            currentlag = nextgoodlag + 1
+            lastlag = currentlag - 1
+        end
+    end
 end
 
+"""
+    Calculate the decorrelation limit for a variogram
+    as the first step whose delta is less than 5%
+    of the first positive delta of the varioagram.
+"""
+function getdecorrelationlimit(spline::Array{Float64, 1})
+
+    local deltas::Array{Float64} = [(spline[i + 1] - spline[i]) for i in 1:length(spline) - 1]
+
+    local position::Int64 = 1
+    local firstpositivedelta::Float64 = 0
+
+    # Find the first positive delta
+    while firstpositivedelta == 0 && position <= length(deltas)
+        if deltas[position] > 0
+            firstpositivedelta = deltas[position]
+        end
+        position += 1
+    end
+
+    # Find the first delta that's smaller than 5% of the first positive delta
+    local decorrelationposition::Int64 = -1
+
+    while decorrelationposition == -1 && position < length(deltas)
+        if deltas[position] <= 0 || deltas[position] / firstpositivedelta <= 0.05
+            decorrelationposition = position
+        else
+            position += 1
+        end
+    end
+
+    return decorrelationposition
+end
 
 end #Module
