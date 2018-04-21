@@ -1,6 +1,6 @@
 using NCDatasets
 
-const SOCAT_FILE = "SOCATv5.tsv"::String
+const SOCAT_FILE = "SOCATv5_all.tsv"::String
 const DECORRELATION_LENGTHS_FILE = "decorrelation_lengths.csv"::String
 const CELL_SIZE = 2.5::Float64
 
@@ -37,12 +37,12 @@ function getcellindex(longitude::Float64, latitude::Float64)
 end
 
 # Add the specified decorrelation length to cells specified
-function assigndatasetcells(totals::Array{Int64, 2}, counts::Array{Int64, 2}, cellindices::Array{Bool, 2}, decorrelationlength::Int64)
+function assigndatasetcells(totals::Array{Int64, 2}, counts::Array{Int64, 2}, cellsindataset::Array{Bool, 2}, decorrelationlength::Int64)
     if decorrelationlength != -1
-        for lon in 1:size(cellindices)[1]
-            for lat in 1:size(cellindices)[2]
+        for lon in 1:size(cellsindataset)[1]
+            for lat in 1:size(cellsindataset)[2]
 
-                if cellindices[lon, lat]
+                if cellsindataset[lon, lat]
                     totals[lon, lat] = totals[lon, lat] + decorrelationlength
                     counts[lon, lat] = counts[lon, lat] + 1
                 end
@@ -82,7 +82,7 @@ function run()
             end
 
             currentdataset = dataset
-            rowsearch = find(decorrelationlengths[:,1] .== dataset)
+            rowsearch = find(decorrelationlengths[:,1] .== "$(dataset).tsv")
             if size(rowsearch) == 0 || size(rowsearch)[1] == 0
                 decorrelationrow = -1
             else
@@ -129,19 +129,23 @@ function run()
 
     ds::Dataset = Dataset("mean_decorrelation_lengths.nc", "c")
 
-    local lonDim = defDim(ds, "longitude", convert(Int64, 360 / CELL_SIZE))
-    lonDim.attrib["units"] = "degrees_east"
-    local latDim = defDim(ds, "latitude", convert(Int64, 180 / CELL_SIZE))
-    latDim.attrib["units"] = "degrees_north"
-    println(typeof(lonDim))
+    defDim(ds, "longitude", convert(Int64, 360 / CELL_SIZE))
+    defDim(ds, "latitude", convert(Int64, 180 / CELL_SIZE))
 
-    local meanVar::NCDatasets.CFVariable = defVar(ds, "decorrelation_lengths", Float64, ("longitude", "latitude"))
-    local totalVar::NCDatasets.CFVariable = defVar(ds, "totals", Float64, ("longitude", "latitude"))
-    local countVar::NCDatasets.CFVariable = defVar(ds, "counts", Float64, ("longitude", "latitude"))
+    local lonvar::NCDatasets.CFVariable = defVar(ds, "longitude", Float32, ["longitude"])
+    lonvar.attrib["units"] = "degrees_east"
+    local latvar::NCDatasets.CFVariable = defVar(ds, "latitude", Float32, ["latitude"])
+    latvar.attrib["units"] = "degrees_north"
 
-    meanVar[:, :] = meandecorrelationlengths
-    totalVar[:, :] = totals
-    countVar[:, :] = counts
+    local meanvar::NCDatasets.CFVariable = defVar(ds, "decorrelation_lengths", Float64, ["longitude", "latitude"], fillvalue=-999.9)
+    local totalvar::NCDatasets.CFVariable = defVar(ds, "totals", Float64, ["longitude", "latitude"], fillvalue=-999.9)
+    local countvar::NCDatasets.CFVariable = defVar(ds, "counts", Float64, ["longitude", "latitude"], fillvalue=-999.9)
+
+    lonvar[:] = getlongitudes()
+    latvar[:] = getlatitudes()
+    meanvar[:, :] = meandecorrelationlengths
+    totalvar[:, :] = totals
+    countvar[:, :] = counts
 
     close(ds)
 
