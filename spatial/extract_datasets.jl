@@ -1,4 +1,4 @@
-const INFILE = "SOCATv5.tsv"::String
+const INFILE = "SOCATv5_all.tsv"::String
 const OUTDIR = "datasets"::String
 
 function run()
