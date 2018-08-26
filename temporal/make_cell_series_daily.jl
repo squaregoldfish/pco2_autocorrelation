@@ -1,5 +1,7 @@
-const INFILE = "SOCATv5_all.tsv"
-const OUTDIR = "cell_series_daily"
+using NCDatasets
+
+const INFILE = "SOCATv5.tsv"
+const OUTFILE = "daily.nc"
 const CELLSIZE = 2.5
 const STARTYEAR = 1985
 const ENDYEAR = 2016
@@ -9,11 +11,11 @@ const MONTHSTARTS = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
 const LEAPMONTHSTARTS = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
 
 # Days of the year
-DAYSTARTS = linspace(1, 365, 365)
+DAYSTARTS = range(1, step=1, length=365)
 
 # Calculate the conversion of leap year days to 365 'normal' year days
 # Each leap year day lasts 1 1/365 normal days 
-LEAPDAYSTARTS = Array{Float64}(365)
+LEAPDAYSTARTS = Array{Float64}(undef, 365)
 
 for i in 1:365
     LEAPDAYSTARTS[i] = i + (((366 / 365) / 365) * (i - 1))
@@ -49,7 +51,7 @@ end
 
 # Calculate the day of the year for a given date
 function getdayindex(date, days)::Float64
-    return days[findlast(find(days .<= date))]
+    return findall(days .<= date)[end]
 end
 
 # Calcaulte the nth day of the complete data set
@@ -85,23 +87,51 @@ function getcellindex(longitude::Float64, latitude::Float64)::Tuple{Int64, Int64
     return loncell, latcell
 end
 
+function applydataset(datasettotals::Array{Float64, 3}, datasetcounts::Array{Int64, 3}, overalltotals::Array{Float64, 3}, overallcounts::Array{Int64, 3})
+    datasetmean::Array{Float64, 3} = datasettotals ./ datasetcounts
+    datasetmean[isnan.(datasetmean)] .= 0
+
+    overalltotals .= overalltotals .+ datasetmean
+    datasetmean[datasetmean .> 0] .= 1
+    overallcounts .= overallcounts .+ datasetmean
+end
+
 function run()
 
     totaldays::Int64 = (ENDYEAR - STARTYEAR + 1) * 365
 
     # Output data set
-    celltotals::Array{Float64, 3} = zeros(convert(Int64, 360 / CELLSIZE), convert(Int64, 180 / CELLSIZE), totaldays)
-    cellcounts::Array{Int64, 3} = zeros(convert(Int64, 360 / CELLSIZE), convert(Int64, 180 / CELLSIZE), totaldays)
+    overallcelltotals::Array{Float64, 3} = zeros(convert(Int64, 360 / CELLSIZE), convert(Int64, 180 / CELLSIZE), totaldays)
+    overallcellcounts::Array{Int64, 3} = zeros(convert(Int64, 360 / CELLSIZE), convert(Int64, 180 / CELLSIZE), totaldays)
+
 
     # Open input file
     inchan::IOStream = open(INFILE)
 
+    currentdataset::String = ""
+    datasetcelltotals::Array{Float64, 3} = zeros(convert(Int64, 360 / CELLSIZE), convert(Int64, 180 / CELLSIZE), totaldays)
+    datasetcellcounts::Array{Int64, 3} = zeros(convert(Int64, 360 / CELLSIZE), convert(Int64, 180 / CELLSIZE), totaldays)
+
     currentline::String = readline(inchan)
     linecount::Int64 = 1
-
     while length(currentline) > 0
 
         fields::Array{String, 1} = split(currentline, "\t")
+
+        dataset::String = fields[1]
+
+        if dataset != currentdataset
+            if length(currentdataset) > 0
+                applydataset(datasetcelltotals, datasetcellcounts, overallcelltotals, overallcellcounts)
+
+                print("\033[1K\r$currentdataset ($linecount)")
+
+                datasetcelltotals .= 0
+                datasetcellcounts .= 0
+            end
+
+            currentdataset = dataset
+        end
 
         year::Int64 = parse(Int64, fields[5])
         month::Int64 = parse(Int64, fields[6])
@@ -115,36 +145,45 @@ function run()
         dateindex::Int64 = getdateindex(year, month, day)
 
         if dateindex != -1
-            celltotals[cellindex[1], cellindex[2], dateindex] = celltotals[cellindex[1], cellindex[2], dateindex] + fco2
-            cellcounts[cellindex[1], cellindex[2], dateindex] = cellcounts[cellindex[1], cellindex[2], dateindex] + 1
+            datasetcelltotals[cellindex[1], cellindex[2], dateindex] = datasetcelltotals[cellindex[1], cellindex[2], dateindex] + fco2
+            datasetcellcounts[cellindex[1], cellindex[2], dateindex] = datasetcellcounts[cellindex[1], cellindex[2], dateindex] + 1
         end
 
         currentline = readline(inchan)
-        linecount += 1
-        if rem(linecount, 10000) == 0
-            print("\033[1K\r$linecount")
-        end
+        linecount = linecount + 1
     end
 
     close(inchan)
 
-    for lon in 1:convert(Int64, 360 / CELLSIZE)
-        for lat in 1:convert(Int64, 180 / CELLSIZE)
-            print("\033[1K\rWriting $lon $lat")
-            outchan::IOStream = open("$(OUTDIR)/cell_series_daily_$(lon)_$(lat).csv", "w")
-            for day in 1:totaldays
-                if cellcounts[lon, lat, day] == 0
-                    write(outchan, "$day,NaN\n")
-                else
-                    local meanfco2::Float64 = celltotals[lon, lat, day] / cellcounts[lon, lat, day]
-                    write(outchan, "$day,$(meanfco2)\n")                    
-                end
-            end
-            close(outchan)
-        end
-    end
+    # The last dataset
+    applydataset(datasetcelltotals, datasetcellcounts, overallcelltotals, overallcellcounts)
 
-    println()
+    # Overall cell means
+    local meanfco2::Array{Float64, 3} = overallcelltotals ./ overallcellcounts
+
+    # Write NetCDF
+    nc = Dataset(OUTFILE, "c")
+    defDim(nc, "longitude", trunc(Int, (360 / CELLSIZE)))
+    defDim(nc, "latitude", trunc(Int, (180 / CELLSIZE)))
+    defDim(nc, "time", totaldays)
+
+    nclon = defVar(nc, "longitude", Float32, ("longitude",))
+    nclat = defVar(nc, "latitude", Float32, ("latitude",))
+    nctime = defVar(nc, "time", Float32, ("time",))
+    ncfco2 = defVar(nc, "fCO2", Float64, ("longitude", "latitude", "time"))
+
+    nclon[:] = collect(range(CELLSIZE / 2, step=CELLSIZE, stop=360))
+    nclon.attrib["units"] = "degrees_east"
+
+    nclat[:] = collect(range(-90 + CELLSIZE / 2, step=CELLSIZE, stop=90))
+    nclat.attrib["units"] = "degrees_north"
+
+    nctime[:] = collect(range(STARTYEAR, step=(1/365), stop=(ENDYEAR + 1) - (1/365)))
+    nctime.attrib["calendar"] = "noleap"
+
+    ncfco2[:,:,:] = meanfco2
+
+    close(nc)
 end
 
 run()
