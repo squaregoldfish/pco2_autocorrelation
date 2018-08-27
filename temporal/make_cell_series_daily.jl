@@ -160,6 +160,7 @@ function run()
 
     # Overall cell means
     local meanfco2::Array{Float64, 3} = overallcelltotals ./ overallcellcounts
+    meanfco2 = replace(meanfco2, NaN=>-1e35)
 
     # Write NetCDF
     nc = Dataset(OUTFILE, "c")
@@ -168,22 +169,23 @@ function run()
     defDim(nc, "time", totaldays)
 
     nclon = defVar(nc, "longitude", Float32, ("longitude",))
-    nclat = defVar(nc, "latitude", Float32, ("latitude",))
-    nctime = defVar(nc, "time", Float32, ("time",))
-    ncfco2 = defVar(nc, "fCO2", Float64, ("longitude", "latitude", "time"))
-
-    nclon[:] = collect(range(CELLSIZE / 2, step=CELLSIZE, stop=360))
     nclon.attrib["units"] = "degrees_east"
 
-    nclat[:] = collect(range(-90 + CELLSIZE / 2, step=CELLSIZE, stop=90))
+    nclat = defVar(nc, "latitude", Float32, ("latitude",))
     nclat.attrib["units"] = "degrees_north"
 
-    nctime[:] = collect(range(STARTYEAR, step=(1/365), stop=(ENDYEAR + 1) - (1/365)))
+    nctime = defVar(nc, "time", Float32, ("time",))
     nctime.attrib["calendar"] = "noleap"
 
+    ncfco2 = defVar(nc, "fCO2", Float64, ("longitude", "latitude", "time"))
+    ncfco2.attrib["_FillValue"] = -1e35
+
+    nclon[:] = collect(range(CELLSIZE / 2, step=CELLSIZE, stop=360))
+    nclat[:] = collect(range(-90 + CELLSIZE / 2, step=CELLSIZE, stop=90))
+    nctime[:] = collect(range(STARTYEAR, step=(1/365), stop=(ENDYEAR + 1) - (1/365)))
     ncfco2[:,:,:] = meanfco2
 
     close(nc)
 end
 
-run()
+@time run()
